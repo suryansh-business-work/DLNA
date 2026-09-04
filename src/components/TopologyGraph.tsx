@@ -395,9 +395,10 @@ function TopologyCanvas({ devices, selectedId, hasInternet, onSelect }: Props): 
       onPaneClick={clearFocus}
       nodeTypes={nodeTypes}
       fitView
+      // No `proOptions.hideAttribution`: React Flow is MIT licensed but asks
+      // that the attribution stay unless you subscribe to Pro, so it stays.
       minZoom={0.15}
       maxZoom={2}
-      proOptions={{ hideAttribution: true }}
       nodesConnectable={false}
       elevateNodesOnSelect
       style={{ background: 'transparent' }}
