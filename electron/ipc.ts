@@ -1,0 +1,23 @@
+/** IPC channel names, shared by the main process and the preload bridge. */
+export const IPC = {
+  getInterfaces: 'lan:get-interfaces',
+  startScan: 'lan:start-scan',
+  stopScan: 'lan:stop-scan',
+  getDevices: 'lan:get-devices',
+  getStatus: 'lan:get-status',
+  openExternal: 'lan:open-external',
+  exportJson: 'lan:export-json',
+  getVendorDbStatus: 'lan:vendor-db-status',
+  refreshVendorDb: 'lan:vendor-db-refresh',
+  pickMedia: 'cast:pick-media',
+  castPlay: 'cast:play',
+  castPause: 'cast:pause',
+  castResume: 'cast:resume',
+  castStop: 'cast:stop',
+  castSeek: 'cast:seek',
+  castVolume: 'cast:volume',
+  getCastSession: 'cast:get-session',
+  castSessionChanged: 'cast:session-changed',
+  devicesChanged: 'lan:devices-changed',
+  statusChanged: 'lan:status-changed',
+} as const;

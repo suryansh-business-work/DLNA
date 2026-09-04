@@ -1,0 +1,10 @@
+# pnpm 10+ reads build-script policy from here rather than from package.json.
+#
+# Every dependency that ships an install script has to be answered explicitly,
+# otherwise `pnpm install` stops with ERR_PNPM_IGNORED_BUILDS.
+allowBuilds:
+  # Unpacks the platform-specific binary used to bundle the preload script.
+  esbuild: true
+  # Only needed for Squirrel.Windows packaging, which this project does not use
+  # (electron-builder is configured for nsis + portable).
+  electron-winstaller: false

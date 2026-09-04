@@ -1,0 +1,81 @@
+{
+  "name": "lan-media-scout",
+  "version": "1.0.0",
+  "description": "Electron app that discovers every TV, phone, speaker and media server on your local Wi-Fi network",
+  "main": "dist/electron/main.js",
+  "author": "Suryansh Srivastava",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "postinstall": "node scripts/ensure-binaries.mjs",
+    "dev": "cross-env NODE_ENV=development concurrently -k -n VITE,TSC,ELECTRON -c cyan,yellow,magenta \"npm:dev:renderer\" \"npm:dev:main\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:main": "concurrently -k -n TSC,PRELOAD -c yellow,blue \"tsc -p tsconfig.electron.json --watch --preserveWatchOutput\" \"npm run build:preload -- --watch\"",
+    "dev:electron": "wait-on tcp:5173 dist/electron/main.js && cross-env NODE_ENV=development node scripts/launch-electron.mjs",
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.electron.json && npm run build:preload",
+    "build:renderer": "vite build",
+    "start": "npm run build && node scripts/launch-electron.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "package": "npm run build && electron-builder",
+    "package:win": "npm run build && electron-builder --win",
+    "package:dir": "npm run build && electron-builder --dir",
+    "build:preload": "esbuild electron/preload.ts --bundle --platform=node --target=node20 --format=cjs --external:electron --outfile=dist/electron/preload.js"
+  },
+  "build": {
+    "appId": "com.suryansh.lanmediascout",
+    "productName": "LAN Media Scout",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network"
+    }
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.3.1",
+    "@fortawesome/free-brands-svg-icons": "^7.3.1",
+    "@fortawesome/free-regular-svg-icons": "^7.3.1",
+    "@fortawesome/free-solid-svg-icons": "^7.3.1",
+    "@fortawesome/react-fontawesome": "^3.5.0",
+    "bonjour-service": "^1.4.4",
+    "fast-xml-parser": "^5.11.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
+    "electron": "~44.1.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "wait-on": "^9.1.0"
+  }
+}
