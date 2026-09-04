@@ -16,6 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
@@ -41,7 +42,12 @@ import {
 
 import type { Device, DeviceCategory } from '@shared/types';
 import { CATEGORY_ICONS, CATEGORY_LABELS, brandIcon } from '../lib/icons';
-import { buildTopology, type TopologyNode, type TopologyNodeData } from '../lib/topology';
+import {
+  buildTopology,
+  relatedNodeIds,
+  type TopologyNode,
+  type TopologyNodeData,
+} from '../lib/topology';
 
 interface Props {
   devices: Device[];
@@ -59,29 +65,43 @@ const KIND_ICONS = {
 } as const;
 
 function TopologyNodeCard({ data, selected }: NodeProps<TopologyNode>): React.JSX.Element {
-  const { kind, label, sublabel, color, device, count, collapsed, online, canPlay } = data;
+  const { kind, label, sublabel, color, device, count, collapsed, online, canPlay, dimmed } = data;
 
   if (kind === 'group') {
     return (
       <Paper
         elevation={0}
         sx={{
-          px: 1.5,
-          py: 0.9,
+          px: 1.2,
+          py: 0.7,
           minWidth: 190,
           borderColor: color,
           bgcolor: `color-mix(in srgb, ${color} 12%, #131a27)`,
           cursor: 'pointer',
-          transition: 'transform .12s',
+          opacity: dimmed ? 0.2 : 1,
+          transition: 'transform .12s, opacity .2s',
           '&:hover': { transform: 'translateY(-1px)' },
         }}
       >
         <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <FontAwesomeIcon
-            icon={collapsed ? faChevronRight : faChevronDown}
-            style={{ color, fontSize: 11 }}
-          />
+          {/* Its own button so clicking the rest of the card focuses the
+              branch instead of collapsing it. */}
+          <IconButton
+            className="nodrag nopan"
+            size="small"
+            aria-label={collapsed ? `Expand ${label}` : `Collapse ${label}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (data.category) data.onToggleCollapse?.(data.category);
+            }}
+            sx={{ width: 20, height: 20, color }}
+          >
+            <FontAwesomeIcon
+              icon={collapsed ? faChevronRight : faChevronDown}
+              style={{ fontSize: 10 }}
+            />
+          </IconButton>
           <FontAwesomeIcon
             icon={CATEGORY_ICONS[data.category as DeviceCategory]}
             style={{ color, fontSize: 13 }}
@@ -156,7 +176,8 @@ function TopologyNodeCard({ data, selected }: NodeProps<TopologyNode>): React.JS
           boxShadow: selected ? `0 0 0 1px #38bdf8` : 'none',
           bgcolor: isInfrastructure ? `color-mix(in srgb, ${color} 10%, #131a27)` : 'background.paper',
           cursor: device ? 'pointer' : 'default',
-          transition: 'transform .12s, border-color .12s',
+          opacity: dimmed ? 0.18 : 1,
+          transition: 'transform .12s, border-color .12s, opacity .2s',
           '&:hover': { transform: device ? 'translateY(-1px)' : 'none', borderColor: color },
         }}
       >
@@ -229,27 +250,67 @@ const nodeTypes: NodeTypes = { topology: TopologyNodeCard };
 
 function TopologyCanvas({ devices, selectedId, hasInternet, onSelect }: Props): React.JSX.Element {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [focusId, setFocusId] = useState<string | null>(null);
   const { fitView } = useReactFlow();
+
+  const toggleCollapse = useCallback((category: DeviceCategory) => {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }, []);
 
   const graph = useMemo(
     () => buildTopology(devices, { collapsedGroups, hasInternet }),
     [devices, collapsedGroups, hasInternet],
   );
 
+  /** Nodes on the focused branch; `null` means nothing is focused. */
+  const related = useMemo(
+    () => (focusId ? relatedNodeIds(graph.edges, focusId) : null),
+    [focusId, graph.edges],
+  );
+
   const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNode>(graph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
 
-  // Re-layout whenever the device list or the collapsed set changes, keeping
-  // the selected node highlighted.
+  // Re-layout whenever the device list, collapsed set or focus changes.
   useEffect(() => {
     setNodes(
       graph.nodes.map((node) => ({
         ...node,
         selected: node.data.device?.id === selectedId,
+        data: {
+          ...node.data,
+          dimmed: related ? !related.has(node.id) : false,
+          onToggleCollapse: toggleCollapse,
+        },
       })),
     );
-    setEdges(graph.edges);
-  }, [graph, selectedId, setNodes, setEdges]);
+
+    setEdges(
+      graph.edges.map((item) => {
+        const onBranch = related ? related.has(item.source) && related.has(item.target) : true;
+        const baseOpacity = Number(item.style?.opacity ?? 1);
+        return {
+          ...item,
+          animated: item.animated || (Boolean(related) && onBranch),
+          style: {
+            ...item.style,
+            opacity: onBranch ? baseOpacity : 0.06,
+            strokeWidth: onBranch && related ? 2.4 : (item.style?.strokeWidth ?? 1.6),
+          },
+        };
+      }),
+    );
+  }, [graph, selectedId, related, toggleCollapse, setNodes, setEdges]);
+
+  // Clear the focus when the focused node disappears from a later scan.
+  useEffect(() => {
+    if (focusId && !graph.nodes.some((node) => node.id === focusId)) setFocusId(null);
+  }, [graph.nodes, focusId]);
 
   // Fit once there is something to fit, and again when the shape changes a lot.
   useEffect(() => {
@@ -260,31 +321,59 @@ function TopologyCanvas({ devices, selectedId, hasInternet, onSelect }: Props): 
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: TopologyNode) => {
-      const { kind, category, device } = node.data as TopologyNodeData;
+      const { device } = node.data as TopologyNodeData;
 
-      if (kind === 'group' && category) {
-        setCollapsedGroups((current) => {
-          const next = new Set(current);
-          if (next.has(category)) next.delete(category);
-          else next.add(category);
-          return next;
-        });
-        return;
-      }
-
+      // Clicking the same node again clears the focus.
+      setFocusId((current) => (current === node.id ? null : node.id));
       if (device) onSelect(device.id === selectedId ? null : device.id);
     },
     [onSelect, selectedId],
   );
 
+  const clearFocus = useCallback(() => {
+    setFocusId(null);
+    onSelect(null);
+  }, [onSelect]);
+
+  const focusedNode = focusId ? graph.nodes.find((node) => node.id === focusId) : undefined;
+
   return (
+    <>
+    {/* A mesh node has no client edges to light up, and the reason is not
+        obvious from the canvas, so say it where the question is asked. */}
+    {focusedNode?.data.kind === 'ap' && (
+      <Alert
+        severity="info"
+        icon={<FontAwesomeIcon icon={faCircleInfo} />}
+        sx={{
+          position: 'absolute',
+          top: 12,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 6,
+          maxWidth: 560,
+          bgcolor: 'rgba(15, 20, 31, 0.96)',
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.3 }}>
+          {focusedNode.data.label} — client list not available
+        </Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.5 }}>
+          Which devices are joined to this mesh node lives inside the router, not
+          on the wire — a passive scan cannot see Wi-Fi association. Its uplink to
+          the router is highlighted because that part is observable.
+        </Typography>
+      </Alert>
+    )}
     <ReactFlow
       nodes={nodes}
       edges={edges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeClick={onNodeClick}
-      onPaneClick={() => onSelect(null)}
+      onPaneClick={clearFocus}
       nodeTypes={nodeTypes}
       fitView
       minZoom={0.15}
@@ -309,6 +398,7 @@ function TopologyCanvas({ devices, selectedId, hasInternet, onSelect }: Props): 
         style={{ background: '#0f141f', border: '1px solid #212b3d', borderRadius: 8 }}
       />
     </ReactFlow>
+    </>
   );
 }
 

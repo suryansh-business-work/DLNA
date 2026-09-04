@@ -28,6 +28,10 @@ export interface TopologyNodeData extends Record<string, unknown> {
   collapsed?: boolean;
   online?: boolean;
   canPlay?: boolean;
+  /** Set while another node is focused and this one is not part of its branch. */
+  dimmed?: boolean;
+  /** Toggles this group's collapsed state; only present on group nodes. */
+  onToggleCollapse?: (category: DeviceCategory) => void;
 }
 
 export type TopologyNode = Node<TopologyNodeData>;
@@ -58,6 +62,40 @@ function edge(id: string, source: string, target: string, options: Partial<Edge>
 export interface TopologyGraph {
   nodes: TopologyNode[];
   edges: Edge[];
+}
+
+/**
+ * Every node on the branch through `focusId`: the chain up to the root plus
+ * everything hanging below it. Used to dim the rest of the graph so one
+ * device, group or mesh node can be looked at in isolation.
+ */
+export function relatedNodeIds(edges: Edge[], focusId: string): Set<string> {
+  const parent = new Map<string, string>();
+  const children = new Map<string, string[]>();
+
+  for (const item of edges) {
+    parent.set(item.target, item.source);
+    children.set(item.source, [...(children.get(item.source) ?? []), item.target]);
+  }
+
+  const related = new Set<string>([focusId]);
+
+  for (let up = parent.get(focusId); up && !related.has(up); up = parent.get(up)) {
+    related.add(up);
+  }
+
+  const stack = [focusId];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const child of children.get(current) ?? []) {
+      if (!related.has(child)) {
+        related.add(child);
+        stack.push(child);
+      }
+    }
+  }
+
+  return related;
 }
 
 export function buildTopology(

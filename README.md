@@ -93,9 +93,11 @@ Switch between **Cards** and **Topology** in the toolbar. The graph is
 ([TopologyGraph.tsx](src/components/TopologyGraph.tsx)), laid out as a four-tier
 tree: Internet → router → mesh nodes → category groups → devices.
 
-- **Click a device** to open its detail drawer, same as in the card view.
-- **Click a group** to collapse or expand it — useful when "Unknown" has a dozen
-  entries.
+- **Click any node** to focus its branch: the path up to the router and
+  everything below it stay lit, the rest of the graph dims.
+- **Click a device** to focus it and open its detail drawer.
+- **Click the chevron** on a group to collapse or expand it — useful when
+  "Unknown" has a dozen entries.
 - **Hover a node** for a summary: name, IP, MAC, vendor, confidence, open ports.
 - Pan, zoom, minimap and a fit-to-view control come with the canvas.
 
