@@ -5,7 +5,8 @@ TVs, phones, tablets, speakers, streaming sticks, DLNA/UPnP media servers, NAS
 boxes, consoles, printers, cameras and smart-home gadgets — and tells you what
 each one actually is.
 
-Built with **Electron + TypeScript + React + Font Awesome**, no native modules.
+Built with **Electron + TypeScript + React + MUI + React Flow + Font Awesome**,
+no native modules.
 
 ![Stack](https://img.shields.io/badge/Electron-44-47848F) ![Stack](https://img.shields.io/badge/TypeScript-7-3178C6) ![Stack](https://img.shields.io/badge/React-19-61DAFB)
 
@@ -36,7 +37,7 @@ pnpm package
 
 ## How discovery works
 
-Five independent techniques run against the subnet, and every result is merged
+Six independent techniques run against the subnet, and every result is merged
 per IP address. No single method finds everything — a Chromecast answers mDNS
 but not SSDP, a smart TV answers SSDP but may ignore mDNS, and a phone often
 answers neither.
@@ -80,8 +81,33 @@ which mesh routers often hand out.
 The satellites themselves are identified from their web-server banner rather
 than guessed from their MAC: TP-Link Deco and Omada nodes answer
 `Server: SHIP`, UniFi APs identify themselves, and so on. They get their own
-**Mesh Node / AP** category, separate from **Router** — a mesh has one router
+**Mesh / AP** category, separate from **Router** — a mesh has one router
 and several satellites, and calling every node a router hides that.
+
+---
+
+## Topology view
+
+Switch between **Cards** and **Topology** in the toolbar. The graph is
+[React Flow](https://reactflow.dev) with [MUI](https://mui.com) nodes
+([TopologyGraph.tsx](src/components/TopologyGraph.tsx)), laid out as a four-tier
+tree: Internet → router → mesh nodes → category groups → devices.
+
+- **Click a device** to open its detail drawer, same as in the card view.
+- **Click a group** to collapse or expand it — useful when "Unknown" has a dozen
+  entries.
+- **Hover a node** for a summary: name, IP, MAC, vendor, confidence, open ports.
+- Pan, zoom, minimap and a fit-to-view control come with the canvas.
+
+The layout is computed in [topology.ts](src/lib/topology.ts) rather than by a
+layout library: the shape is a fixed tree, so a hand-rolled pass is smaller and
+deterministic between renders.
+
+**The edges are drawn honestly.** A mesh satellite's uplink to the router is a
+real, observed relationship and is drawn solid. Which access point a *client* is
+associated with cannot be seen from a passive scan — that lives in the router's
+admin API — so client edges are dashed and the legend says so rather than
+implying a topology the app never measured.
 
 ---
 
@@ -188,8 +214,9 @@ shared/types.ts        Types shared by both processes
 
 src/                   React renderer
   App.tsx              Layout, filtering, sorting, keyboard shortcuts
-  components/          DeviceCard, DeviceDetail, SettingsModal
-  lib/                 Font Awesome icon mapping, formatting helpers
+  components/          DeviceCard, DeviceDetail, SettingsModal, CastBar, TopologyGraph
+  theme.ts             MUI dark theme matching the CSS custom properties
+  lib/                 Icon mapping, formatting helpers, topology layout
   styles.css           Dark theme
 
 scripts/

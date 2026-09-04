@@ -32,6 +32,7 @@ import { CastBar } from './components/CastBar';
 import { DeviceCard } from './components/DeviceCard';
 import { DeviceDetail } from './components/DeviceDetail';
 import { SettingsModal } from './components/SettingsModal';
+import { TopologyGraph, ViewSwitch } from './components/TopologyGraph';
 import { CATEGORY_COLORS, CATEGORY_ICONS, CATEGORY_LABELS, CATEGORY_ORDER } from './lib/icons';
 import { compareIp, searchBlob } from './lib/format';
 
@@ -67,6 +68,7 @@ export default function App(): React.JSX.Element {
   const [showSettings, setShowSettings] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [vendorHintDismissed, setVendorHintDismissed] = useState(false);
+  const [view, setView] = useState<'grid' | 'graph'>('grid');
 
   /* ---------------------------------------------------------------- wiring */
 
@@ -425,34 +427,44 @@ export default function App(): React.JSX.Element {
               <span className="toolbar__count">
                 {visible.length} of {devices.length} shown
               </span>
+              <ViewSwitch view={view} onChange={setView} />
             </div>
           )}
 
-          <div className="grid-wrap">
-            {visible.length > 0 ? (
-              <div className="grid">
-                {visible.map((device) => (
-                  <DeviceCard
-                    key={device.id}
-                    device={device}
-                    selected={device.id === selectedId}
-                    onSelect={(next) => setSelectedId(next.id === selectedId ? null : next.id)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                scanning={status.running}
-                hasScanned={hasScanned}
-                filtered={devices.length > 0}
-                onScan={() => void startScan()}
-                onClearFilters={() => {
-                  setQuery('');
-                  setCategoryFilter('all');
-                }}
-              />
-            )}
-          </div>
+          {view === 'graph' && devices.length > 0 ? (
+            <TopologyGraph
+              devices={visible}
+              selectedId={selectedId}
+              hasInternet={Boolean(primary?.gateway)}
+              onSelect={setSelectedId}
+            />
+          ) : (
+            <div className="grid-wrap">
+              {visible.length > 0 ? (
+                <div className="grid">
+                  {visible.map((device) => (
+                    <DeviceCard
+                      key={device.id}
+                      device={device}
+                      selected={device.id === selectedId}
+                      onSelect={(next) => setSelectedId(next.id === selectedId ? null : next.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  scanning={status.running}
+                  hasScanned={hasScanned}
+                  filtered={devices.length > 0}
+                  onScan={() => void startScan()}
+                  onClearFilters={() => {
+                    setQuery('');
+                    setCategoryFilter('all');
+                  }}
+                />
+              )}
+            </div>
+          )}
         </main>
 
         {selected && (

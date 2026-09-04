@@ -1,8 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ThemeProvider } from '@mui/material/styles';
 import { config } from '@fortawesome/fontawesome-svg-core';
 import '@fortawesome/fontawesome-svg-core/styles.css';
 import App from './App';
+import { theme } from './theme';
 import './styles.css';
 
 // Vite injects the icon CSS itself, so stop Font Awesome adding a duplicate
@@ -27,7 +29,9 @@ if (typeof window.lanScout === 'undefined') {
 } else {
   createRoot(container).render(
     <StrictMode>
-      <App />
+      <ThemeProvider theme={theme}>
+        <App />
+      </ThemeProvider>
     </StrictMode>,
   );
 }

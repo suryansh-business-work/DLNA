@@ -339,7 +339,7 @@ export const CATEGORY_LABELS: Record<DeviceCategory, string> = {
   computer: 'Computer',
   nas: 'NAS / Storage',
   router: 'Router',
-  'access-point': 'Mesh Node / AP',
+  'access-point': 'Mesh / AP',
   printer: 'Printer',
   camera: 'Camera',
   iot: 'Smart Home',
