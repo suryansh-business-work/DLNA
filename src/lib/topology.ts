@@ -43,6 +43,8 @@ const COLUMN_WIDTH = 250;
 const DEVICE_ROW_HEIGHT = 78;
 const GROUP_TOP_GAP = 150;
 const DEVICE_TOP_GAP = 110;
+/** Vertical gap between a mesh node and the clients hanging off it. */
+const AP_CLIENT_TOP_GAP = 110;
 
 const INTERNET_COLOR = '#64748b';
 const ROUTER_COLOR = CATEGORY_COLORS.router;
@@ -113,8 +115,27 @@ export function buildTopology(
     (device) => !device.isGateway && device.category !== 'access-point',
   );
 
-  const grouped = new Map<DeviceCategory, Device[]>();
+  // When the router has told us which mesh node each client is on, hang the
+  // clients off their actual node. Without that data everything stays grouped
+  // by category under the router, because inventing a parent would be a lie.
+  const apByMac = new Map<string, Device>();
+  for (const ap of accessPoints) if (ap.mac) apByMac.set(ap.mac.toUpperCase(), ap);
+  if (router?.mac) apByMac.set(router.mac.toUpperCase(), router);
+
+  const byUplink = new Map<string, Device[]>();
+  const ungrouped: Device[] = [];
   for (const device of clients) {
+    const uplink = device.uplinkMac?.toUpperCase();
+    if (uplink && apByMac.has(uplink)) {
+      byUplink.set(uplink, [...(byUplink.get(uplink) ?? []), device]);
+    } else {
+      ungrouped.push(device);
+    }
+  }
+  const hasAssociations = byUplink.size > 0;
+
+  const grouped = new Map<DeviceCategory, Device[]>();
+  for (const device of hasAssociations ? ungrouped : clients) {
     const list = grouped.get(device.category) ?? [];
     list.push(device);
     grouped.set(device.category, list);
@@ -133,7 +154,9 @@ export function buildTopology(
   const centerX = Math.max(groupSpan, apSpan) / 2;
 
   const rowAp = accessPoints.length > 0 ? ROW_AP : ROW_ROUTER;
-  const rowGroup = rowAp + GROUP_TOP_GAP;
+  const tallestApStack = Math.max(0, ...[...byUplink.values()].map((list) => list.length));
+  const rowGroup =
+    rowAp + GROUP_TOP_GAP + (tallestApStack > 0 ? AP_CLIENT_TOP_GAP + tallestApStack * DEVICE_ROW_HEIGHT : 0);
 
   /* --------------------------------------------------------------- nodes */
 
@@ -176,6 +199,9 @@ export function buildTopology(
   accessPoints.forEach((ap, index) => {
     const id = `node-ap-${ap.id}`;
     const x = (Math.max(apSpan, groupSpan) - apSpan) / 2 + index * COLUMN_WIDTH + 20;
+    const attached = ap.mac ? (byUplink.get(ap.mac.toUpperCase()) ?? []) : [];
+    const collapsed = options.collapsedGroups.has(id);
+
     nodes.push({
       id,
       type: 'topology',
@@ -187,10 +213,72 @@ export function buildTopology(
         color: AP_COLOR,
         device: ap,
         online: ap.online,
+        count: attached.length > 0 ? attached.length : undefined,
       },
     });
     // A satellite's uplink to the router is a real link, so it is drawn solid.
     edges.push(edge(`edge-ap-${ap.id}`, ROUTER_ID, id, { style: { stroke: AP_COLOR, strokeWidth: 1.8 } }));
+
+    if (collapsed) return;
+
+    // Clients the router says are joined to this node. Solid edges: unlike the
+    // category grouping, this association was actually reported to us.
+    attached.forEach((device, deviceIndex) => {
+      const deviceId = `node-device-${device.id}`;
+      nodes.push({
+        id: deviceId,
+        type: 'topology',
+        position: { x, y: rowAp + AP_CLIENT_TOP_GAP + deviceIndex * DEVICE_ROW_HEIGHT },
+        data: {
+          kind: 'device',
+          label: device.name,
+          sublabel: device.ip,
+          color: CATEGORY_COLORS[device.category],
+          device,
+          category: device.category,
+          online: device.online,
+          canPlay: Boolean(device.playback),
+        },
+      });
+      edges.push(
+        edge(`edge-uplink-${device.id}`, id, deviceId, {
+          style: {
+            stroke: CATEGORY_COLORS[device.category],
+            strokeWidth: 1.6,
+            opacity: 0.9,
+          },
+        }),
+      );
+    });
+  });
+
+  // Clients on the router itself, or on a node we could not match.
+  const routerAttached = router?.mac ? (byUplink.get(router.mac.toUpperCase()) ?? []) : [];
+  routerAttached.forEach((device, index) => {
+    const deviceId = `node-device-${device.id}`;
+    nodes.push({
+      id: deviceId,
+      type: 'topology',
+      position: {
+        x: centerX + Math.max(apSpan, groupSpan) / 2 + 40,
+        y: rowAp + index * DEVICE_ROW_HEIGHT,
+      },
+      data: {
+        kind: 'device',
+        label: device.name,
+        sublabel: device.ip,
+        color: CATEGORY_COLORS[device.category],
+        device,
+        category: device.category,
+        online: device.online,
+        canPlay: Boolean(device.playback),
+      },
+    });
+    edges.push(
+      edge(`edge-uplink-${device.id}`, ROUTER_ID, deviceId, {
+        style: { stroke: CATEGORY_COLORS[device.category], strokeWidth: 1.6, opacity: 0.9 },
+      }),
+    );
   });
 
   groups.forEach((group, index) => {

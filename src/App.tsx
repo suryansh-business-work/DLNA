@@ -23,11 +23,12 @@ import type {
   Device,
   DeviceCategory,
   NetworkInterfaceInfo,
+  RouterLinkStatus,
   ScanOptions,
   ScanStatus,
   VendorDbStatus,
 } from '@shared/types';
-import { DEFAULT_SCAN_OPTIONS, EMPTY_CAST_SESSION } from '@shared/types';
+import { DEFAULT_SCAN_OPTIONS, EMPTY_CAST_SESSION, EMPTY_ROUTER_LINK } from '@shared/types';
 import { CastBar } from './components/CastBar';
 import { DeviceCard } from './components/DeviceCard';
 import { DeviceDetail } from './components/DeviceDetail';
@@ -60,6 +61,7 @@ export default function App(): React.JSX.Element {
   const [vendorDbBusy, setVendorDbBusy] = useState(false);
   const [castSession, setCastSession] = useState<CastSession>(EMPTY_CAST_SESSION);
   const [castOpen, setCastOpen] = useState(false);
+  const [routerLink, setRouterLink] = useState<RouterLinkStatus>(EMPTY_ROUTER_LINK);
 
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<DeviceCategory | 'all'>('all');
@@ -76,6 +78,7 @@ export default function App(): React.JSX.Element {
     const unsubscribeDevices = window.lanScout.onDevices(setDevices);
     const unsubscribeStatus = window.lanScout.onStatus(setStatus);
     const unsubscribeCast = window.lanScout.onCastSession(setCastSession);
+    const unsubscribeRouter = window.lanScout.onRouterLink(setRouterLink);
 
     void window.lanScout.getInterfaces().then(setInterfaces);
     void window.lanScout.getDevices().then((initial) => {
@@ -86,6 +89,7 @@ export default function App(): React.JSX.Element {
     });
     void window.lanScout.getStatus().then(setStatus);
     void window.lanScout.getVendorDbStatus().then(setVendorDb);
+    void window.lanScout.getRouterLink().then(setRouterLink);
     void window.lanScout.getCastSession().then((session) => {
       setCastSession(session);
       if (session.media) setCastOpen(true);
@@ -95,6 +99,7 @@ export default function App(): React.JSX.Element {
       unsubscribeDevices();
       unsubscribeStatus();
       unsubscribeCast();
+      unsubscribeRouter();
     };
   }, []);
 
@@ -146,6 +151,14 @@ export default function App(): React.JSX.Element {
   const closeCast = useCallback(async () => {
     await window.lanScout.castStop().catch(() => undefined);
     setCastOpen(false);
+  }, []);
+
+  const connectRouter = useCallback(async (host: string, password: string, remember: boolean) => {
+    setRouterLink(await window.lanScout.connectRouter(host, password, remember));
+  }, []);
+
+  const disconnectRouter = useCallback(async () => {
+    setRouterLink(await window.lanScout.disconnectRouter());
   }, []);
 
   const refreshVendorDb = useCallback(async () => {
@@ -499,6 +512,10 @@ export default function App(): React.JSX.Element {
           vendorDb={vendorDb}
           vendorDbBusy={vendorDbBusy}
           onRefreshVendorDb={() => void refreshVendorDb()}
+          routerLink={routerLink}
+          gateway={primary?.gateway}
+          onConnectRouter={connectRouter}
+          onDisconnectRouter={disconnectRouter}
           onClose={() => setShowSettings(false)}
         />
       )}

@@ -232,8 +232,28 @@ export class DiscoveryManager extends EventEmitter<DiscoveryEvents> {
     errors: [],
   };
 
+  /**
+   * Mesh associations keyed by client MAC, supplied by the router when the user
+   * has connected one. Scanning cannot produce this, so it stays empty until a
+   * router link provides it.
+   */
+  private uplinks = new Map<string, { nodeMac: string; kind?: string }>();
+
   setVendorLookup(lookup: (mac?: string) => VendorMatch | undefined): void {
     this.vendorLookup = lookup;
+  }
+
+  /** Replaces the client -> mesh-node map and re-emits the current devices. */
+  setUplinks(entries: Array<{ clientMac: string; nodeMac: string; kind?: string }>): void {
+    this.uplinks = new Map(
+      entries
+        .filter((entry) => isUsableMac(entry.clientMac) && isUsableMac(entry.nodeMac))
+        .map((entry) => [
+          formatMac(entry.clientMac),
+          { nodeMac: formatMac(entry.nodeMac), kind: entry.kind },
+        ]),
+    );
+    if (this.candidates.size > 0) this.emitDevices();
   }
 
   getStatus(): ScanStatus {
@@ -573,6 +593,7 @@ export class DiscoveryManager extends EventEmitter<DiscoveryEvents> {
         candidate.upnp.find((description) => !/InternetGatewayDevice/i.test(description.deviceType ?? '')) ??
         candidate.upnp[0];
 
+      const uplink = candidate.mac ? this.uplinks.get(formatMac(candidate.mac)) : undefined;
       const vendorMatch = this.vendorLookup(candidate.mac);
       const isGateway = this.gateway === candidate.ip;
       const isSelf = this.localAddresses.has(candidate.ip);
@@ -642,6 +663,8 @@ export class DiscoveryManager extends EventEmitter<DiscoveryEvents> {
                 ? `http://${candidate.ip}:8080/`
                 : undefined),
         playback: detectPlayback(candidate),
+        uplinkMac: uplink?.nodeMac,
+        uplinkKind: uplink?.kind,
         sources: [...candidate.sources],
         services,
         openPorts: candidate.openPorts.map((port) => ({ port, label: portLabel(port) })),

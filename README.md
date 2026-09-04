@@ -105,6 +105,22 @@ The layout is computed in [topology.ts](src/lib/topology.ts) rather than by a
 layout library: the shape is a fixed tree, so a hand-rolled pass is smaller and
 deterministic between renders.
 
+### Mesh associations (optional router link)
+
+Settings has an optional TP-Link Deco login. When the router accepts it, the app
+pulls the real per-node client list and re-parents the graph so each client
+hangs off the mesh node it is actually joined to, with solid edges - clicking a
+mesh node then lights up exactly its devices.
+
+The password is encrypted with Electron `safeStorage` (Windows DPAPI, macOS
+Keychain, libsecret on Linux) in the app's own data directory, and is only ever
+sent to the router address entered.
+
+Not every Deco supports this. Models managed solely through the TP-Link phone
+app expose the key exchange and the encrypted transport but register no local
+`login` callback, and the app says so plainly instead of reporting a protocol
+error. Without the link, the graph keeps its grouped layout.
+
 **The edges are drawn honestly.** A mesh satellite's uplink to the router is a
 real, observed relationship and is drawn solid. Which access point a *client* is
 associated with cannot be seen from a passive scan — that lives in the router's
@@ -192,6 +208,9 @@ hint that the device is a personal one.
 
 ```
 electron/              Main process (Node side)
+  router/
+    index.ts           Optional router link: credentials via safeStorage
+    decoClient.ts      TP-Link Deco local API (RSA + AES + signed transport)
   cast/
     index.ts           CastController: publish a file, drive one playback session
     mediaServer.ts     Local HTTP server with Range support

@@ -51,6 +51,32 @@ export interface PlaybackCapability {
   connectionManagerUrl?: string;
 }
 
+/** Optional link to the user's router, which knows the mesh associations. */
+export interface RouterLinkStatus {
+  configured: boolean;
+  connected: boolean;
+  connecting: boolean;
+  host?: string;
+  nodeCount: number;
+  clientCount: number;
+  /** True when the router reports which mesh node each client is joined to. */
+  hasAssociations: boolean;
+  fetchedAt?: number;
+  /** False on systems with no OS secret store, where the password cannot be saved. */
+  canStoreSecurely: boolean;
+  error?: string;
+}
+
+export const EMPTY_ROUTER_LINK: RouterLinkStatus = {
+  configured: false,
+  connected: false,
+  connecting: false,
+  nodeCount: 0,
+  clientCount: 0,
+  hasAssociations: false,
+  canStoreSecurely: false,
+};
+
 export interface Device {
   /** Stable id — MAC when known, otherwise the IP. */
   id: string;
@@ -76,6 +102,13 @@ export interface Device {
   httpTitle?: string;
   /** Round-trip time of the last successful TCP probe, in ms. */
   latencyMs?: number;
+  /**
+   * MAC of the mesh node this device is joined to. Only ever set from the
+   * router's own client list - it cannot be observed by scanning.
+   */
+  uplinkMac?: string;
+  /** How the device reaches the network, e.g. 'wired' or 'band5'. */
+  uplinkKind?: string;
   /** Set when this device can be sent a video to play. */
   playback?: PlaybackCapability;
   isGateway: boolean;
@@ -192,6 +225,10 @@ export interface LanScoutApi {
   getStatus(): Promise<ScanStatus>;
   openExternal(url: string): Promise<void>;
   exportJson(devices: Device[]): Promise<{ saved: boolean; path?: string }>;
+  getRouterLink(): Promise<RouterLinkStatus>;
+  connectRouter(host: string, password: string, remember: boolean): Promise<RouterLinkStatus>;
+  refreshRouter(): Promise<RouterLinkStatus>;
+  disconnectRouter(): Promise<RouterLinkStatus>;
   getVendorDbStatus(): Promise<VendorDbStatus>;
   refreshVendorDb(): Promise<VendorDbStatus>;
 
@@ -209,6 +246,7 @@ export interface LanScoutApi {
   onDevices(cb: (devices: Device[]) => void): () => void;
   onStatus(cb: (status: ScanStatus) => void): () => void;
   onCastSession(cb: (session: CastSession) => void): () => void;
+  onRouterLink(cb: (status: RouterLinkStatus) => void): () => void;
   platform: NodeJS.Platform;
   appVersion: string;
 }

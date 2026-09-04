@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import type { CastSession, Device, LanScoutApi, ScanOptions, ScanStatus } from '../shared/types';
+import type {
+  CastSession,
+  Device,
+  LanScoutApi,
+  RouterLinkStatus,
+  ScanOptions,
+  ScanStatus,
+} from '../shared/types';
 import { IPC } from './ipc';
 
 /**
@@ -33,9 +40,16 @@ const api: LanScoutApi = {
   castSeek: (seconds: number) => ipcRenderer.invoke(IPC.castSeek, seconds),
   castVolume: (percent: number) => ipcRenderer.invoke(IPC.castVolume, percent),
   getCastSession: () => ipcRenderer.invoke(IPC.getCastSession),
+
+  getRouterLink: () => ipcRenderer.invoke(IPC.getRouterLink),
+  connectRouter: (host: string, password: string, remember: boolean) =>
+    ipcRenderer.invoke(IPC.connectRouter, { host, password, remember }),
+  refreshRouter: () => ipcRenderer.invoke(IPC.refreshRouter),
+  disconnectRouter: () => ipcRenderer.invoke(IPC.disconnectRouter),
   onDevices: (callback) => subscribe<Device[]>(IPC.devicesChanged, callback),
   onStatus: (callback) => subscribe<ScanStatus>(IPC.statusChanged, callback),
   onCastSession: (callback) => subscribe<CastSession>(IPC.castSessionChanged, callback),
+  onRouterLink: (callback) => subscribe<RouterLinkStatus>(IPC.routerLinkChanged, callback),
   platform: process.platform,
   appVersion: process.env.npm_package_version ?? '1.0.0',
 };

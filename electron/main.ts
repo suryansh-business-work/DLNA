@@ -2,11 +2,13 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Device, ScanOptions } from '../shared/types';
+import type { Device, RouterLinkStatus, ScanOptions } from '../shared/types';
+import { EMPTY_ROUTER_LINK } from '../shared/types';
 import { AUDIO_EXTENSIONS, CastController, VIDEO_EXTENSIONS } from './cast';
 import { DiscoveryManager } from './discovery';
 import { listInterfaces } from './discovery/net';
 import { VendorDatabase } from './discovery/vendorDb';
+import { RouterLink } from './router';
 import { IPC } from './ipc';
 
 // Only `npm run dev` points at the Vite server. A plain unpackaged run
@@ -18,6 +20,7 @@ const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173
 const discovery = new DiscoveryManager();
 const cast = new CastController(() => discovery.getDevices());
 let vendorDb: VendorDatabase | null = null;
+let routerLink: RouterLink | null = null;
 let mainWindow: BrowserWindow | null = null;
 
 /**
@@ -171,6 +174,69 @@ function registerIpc(): void {
   );
   ipcMain.handle(IPC.getCastSession, () => cast.getSession());
 
+  /* --------------------------------------------------------- router link */
+
+  /** Pushes the router's client -> mesh-node map into the discovery engine. */
+  const applyUplinks = (): void => {
+    const snapshot = routerLink?.getSnapshot();
+    if (!snapshot) return;
+
+    discovery.setUplinks(
+      snapshot.clients
+        .filter((client) => client.nodeMac)
+        .map((client) => ({
+          clientMac: client.mac,
+          nodeMac: client.nodeMac!,
+          kind: client.wireType ?? client.connection,
+        })),
+    );
+  };
+
+  const publishRouterStatus = (status: RouterLinkStatus): RouterLinkStatus => {
+    if (!mainWindow?.isDestroyed()) mainWindow?.webContents.send(IPC.routerLinkChanged, status);
+    return status;
+  };
+
+  ipcMain.handle(IPC.getRouterLink, () => routerLink?.status ?? EMPTY_ROUTER_LINK);
+
+  ipcMain.handle(IPC.connectRouter, async (_event, payload: unknown) => {
+    if (!routerLink) return EMPTY_ROUTER_LINK;
+
+    const { host, password, remember } = (payload ?? {}) as Record<string, unknown>;
+    if (typeof host !== 'string' || typeof password !== 'string') {
+      throw new TypeError('A router address and password are required');
+    }
+
+    const status = await routerLink.connect(host.trim(), password, remember === true);
+    applyUplinks();
+    return publishRouterStatus(status);
+  });
+
+  ipcMain.handle(IPC.refreshRouter, async () => {
+    if (!routerLink) return EMPTY_ROUTER_LINK;
+    const status = await routerLink.refresh();
+    applyUplinks();
+    return publishRouterStatus(status);
+  });
+
+  ipcMain.handle(IPC.disconnectRouter, async () => {
+    if (!routerLink) return EMPTY_ROUTER_LINK;
+    const status = await routerLink.disconnect();
+    discovery.setUplinks([]);
+    return publishRouterStatus(status);
+  });
+
+  // A scan is the natural moment to re-read the router, so associations stay
+  // in step with the device list rather than drifting behind it.
+  discovery.on('status', (status) => {
+    if (status.phase === 'done' && !status.running && routerLink?.status.configured) {
+      void routerLink.refresh().then((next) => {
+        applyUplinks();
+        publishRouterStatus(next);
+      });
+    }
+  });
+
   ipcMain.handle(IPC.exportJson, async (_event, devices: Device[]) => {
     if (!mainWindow) return { saved: false };
 
@@ -216,10 +282,16 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     vendorDb = new VendorDatabase(app.getPath('userData'));
+    routerLink = new RouterLink(app.getPath('userData'));
     // Reuse a previously downloaded registry if one is cached. Nothing is
     // fetched here - a download only happens when the user asks for it.
     const cached = await vendorDb.loadFromCache();
     if (cached.loaded) discovery.setVendorLookup((mac) => vendorDb!.lookup(mac));
+
+    // Pick up a router the user linked previously. The first scan then already
+    // has the mesh associations rather than gaining them a beat later.
+    const saved = await routerLink.loadSaved();
+    if (saved.configured) void routerLink.refresh();
 
     registerIpc();
     forwardToRenderer();

@@ -225,6 +225,18 @@ function TopologyNodeCard({ data, selected }: NodeProps<TopologyNode>): React.JS
               {canPlay && (
                 <FontAwesomeIcon icon={faDisplay} style={{ color: '#34d399', fontSize: 10 }} />
               )}
+              {kind === 'ap' && count !== undefined && (
+                <Chip
+                  size="small"
+                  label={count}
+                  sx={{
+                    height: 17,
+                    fontSize: 10,
+                    bgcolor: `color-mix(in srgb, ${color} 24%, transparent)`,
+                    color,
+                  }}
+                />
+              )}
             </Stack>
             {sublabel && (
               <Typography
@@ -337,11 +349,18 @@ function TopologyCanvas({ devices, selectedId, hasInternet, onSelect }: Props): 
 
   const focusedNode = focusId ? graph.nodes.find((node) => node.id === focusId) : undefined;
 
+  // Only explain the missing client list when there genuinely is none. Once a
+  // router link supplies the associations, the node has real children and the
+  // note would be wrong.
+  const focusedApHasClients =
+    focusedNode?.data.kind === 'ap' &&
+    graph.edges.some((item) => item.source === focusedNode.id && item.target.startsWith('node-device-'));
+
   return (
     <>
     {/* A mesh node has no client edges to light up, and the reason is not
         obvious from the canvas, so say it where the question is asked. */}
-    {focusedNode?.data.kind === 'ap' && (
+    {focusedNode?.data.kind === 'ap' && !focusedApHasClients && (
       <Alert
         severity="info"
         icon={<FontAwesomeIcon icon={faCircleInfo} />}
